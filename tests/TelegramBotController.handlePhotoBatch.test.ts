@@ -110,6 +110,7 @@ function createMocks() {
 function createController(
   config: StoreConfig,
   mocks: ReturnType<typeof createMocks>,
+  allowedChatId?: string,
 ) {
   const controller = new TelegramBotController(
     config,
@@ -121,6 +122,7 @@ function createController(
     mocks.sheetsWriter as any,
     mocks.logger as any,
     "test-bot-token",
+    allowedChatId,
   );
   // Inject a mock bot so sendMessage works
   (controller as any).bot = {

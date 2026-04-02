@@ -25,6 +25,7 @@ export class TelegramBotController {
   private logger: Logger;
   private botToken: string;
   private bot: Bot | undefined;
+  private allowedChatId: string | undefined;
 
   constructor(
     config: StoreConfig,
@@ -36,6 +37,7 @@ export class TelegramBotController {
     sheetsWriter: GoogleSheetsWriter,
     logger: Logger,
     botToken: string,
+    allowedChatId?: string,
   ) {
     this.config = config;
     this.batchAccumulator = batchAccumulator;
@@ -46,6 +48,12 @@ export class TelegramBotController {
     this.sheetsWriter = sheetsWriter;
     this.logger = logger;
     this.botToken = botToken;
+    this.allowedChatId = allowedChatId;
+  }
+
+  private isChatAllowed(chatId: number | string): boolean {
+    if (!this.allowedChatId) return true;
+    return String(chatId) === this.allowedChatId;
   }
 
   async start(): Promise<void> {
@@ -56,6 +64,7 @@ export class TelegramBotController {
 
     // Photo handler
     this.bot.on("message:photo", async (ctx) => {
+      if (!this.isChatAllowed(ctx.chat.id)) return;
       const photos = ctx.message.photo;
       const largest = photos[photos.length - 1];
 
@@ -101,6 +110,7 @@ export class TelegramBotController {
 
     // "Process Now" command
     this.bot.command("process", async (ctx) => {
+      if (!this.isChatAllowed(ctx.chat.id)) return;
       const senderId = String(ctx.from?.id ?? ctx.message?.chat.id);
       this.batchAccumulator.processNow(senderId);
       await ctx.reply("⚡ Processing your photos now...");
@@ -108,6 +118,7 @@ export class TelegramBotController {
 
     // Inline button handler for "Process Now"
     this.bot.on("callback_query:data", async (ctx) => {
+      if (!this.isChatAllowed(ctx.chat?.id ?? 0)) return;
       if (ctx.callbackQuery.data === "process_now") {
         const senderId = String(ctx.from.id);
         this.batchAccumulator.processNow(senderId);
@@ -118,6 +129,7 @@ export class TelegramBotController {
 
     // Text handler: respond with instructions if not a command
     this.bot.on("message:text", async (ctx) => {
+      if (!this.isChatAllowed(ctx.chat.id)) return;
       const text = ctx.message.text;
       if (text.startsWith("/")) {
         return; // Let other handlers or grammY handle commands

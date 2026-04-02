@@ -79,6 +79,7 @@ async function main(): Promise<void> {
   const sheetsWriter = new GoogleSheetsWriter(sheets);
 
   // 6. Create controller with all dependencies and start
+  const allowedChatId = process.env.ALLOWED_CHAT_ID || undefined;
   const controller = new TelegramBotController(
     storeConfig,
     batchAccumulator,
@@ -89,6 +90,7 @@ async function main(): Promise<void> {
     sheetsWriter,
     logger,
     telegramBotToken,
+    allowedChatId,
   );
 
   logger.info("startup", {
