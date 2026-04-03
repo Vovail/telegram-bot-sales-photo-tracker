@@ -7,6 +7,9 @@
     "scripts": {
         "build": "tsc",
         "start": "node dist/index.js",
+        "start:poll": "node dist/index.js",
+        "set-webhook": "npx tsx scripts/set-webhook.ts",
+        "remove-webhook": "npx tsx scripts/set-webhook.ts --remove",
         "test": "vitest --run"
     },
     "keywords": [],

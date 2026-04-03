@@ -1,4 +1,4 @@
-import { Bot, InlineKeyboard } from "grammy";
+import { Bot, InlineKeyboard, webhookCallback } from "grammy";
 import type {
   StoreConfig,
   PhotoBatch,
@@ -51,16 +51,27 @@ export class TelegramBotController {
     this.allowedChatId = allowedChatId;
   }
 
-  private isChatAllowed(chatId: number | string): boolean {
-    if (!this.allowedChatId) return true;
-    return String(chatId) === this.allowedChatId;
-  }
+  /**
+   * Initialize the bot instance and register all handlers.
+   * Called by both start() (polling) and getWebhookHandler() (serverless).
+   */
+  private initBot(): Bot {
+    if (this.bot) return this.bot;
 
-  async start(): Promise<void> {
     this.bot = new Bot(this.botToken);
 
     // Register batch callback
     this.batchAccumulator.onBatchReady((batch) => this.handlePhotoBatch(batch));
+
+    this.registerHandlers();
+    return this.bot;
+  }
+
+  /**
+   * Register all message/command/callback handlers on the bot.
+   */
+  private registerHandlers(): void {
+    if (!this.bot) return;
 
     // Photo handler
     this.bot.on("message:photo", async (ctx) => {
@@ -138,12 +149,39 @@ export class TelegramBotController {
         "📷 Please send photos of your sales notes. I'll process them and record the data for you.",
       );
     });
+  }
+
+  private isChatAllowed(chatId: number | string): boolean {
+    if (!this.allowedChatId) return true;
+    return String(chatId) === this.allowedChatId;
+  }
+
+  /**
+   * Start the bot in long-polling mode.
+   * Use this for local development or non-serverless deployments.
+   */
+  async start(): Promise<void> {
+    this.initBot();
 
     this.logger.info("bot_started", {
-      details: { message: "Telegram bot started and listening for messages" },
+      details: { message: "Telegram bot started in polling mode" },
     });
 
-    await this.bot.start();
+    await this.bot!.start();
+  }
+
+  /**
+   * Returns a webhook callback handler compatible with Vercel/Express.
+   * Use this for serverless deployments (Vercel, AWS Lambda, etc.).
+   */
+  getWebhookHandler(): (req: Request) => Promise<Response> {
+    const bot = this.initBot();
+
+    this.logger.info("bot_started", {
+      details: { message: "Telegram bot initialized in webhook mode" },
+    });
+
+    return webhookCallback(bot, "std/http");
   }
 
   /**
