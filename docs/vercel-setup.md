@@ -17,13 +17,18 @@
 
 Go to your project in the Vercel dashboard → **Settings** → **Environment Variables** and add:
 
-| Variable                  | Value                                                                   |
-| ------------------------- | ----------------------------------------------------------------------- |
-| `TELEGRAM_BOT_TOKEN`      | Bot token from @BotFather                                               |
-| `GEMINI_API_KEY`          | Gemini API key                                                          |
-| `GOOGLE_CREDENTIALS_JSON` | Full JSON content of your service account key file (as a single string) |
-| `ALLOWED_CHAT_ID`         | (Optional) Chat ID to restrict the bot to                               |
-| `CONFIG_PATH`             | `stores.json` (or leave unset for default)                              |
+| Variable                  | Value                                                                |
+| ------------------------- | -------------------------------------------------------------------- |
+| `TELEGRAM_BOT_TOKEN`      | Bot token from @BotFather                                            |
+| `GEMINI_API_KEY`          | Gemini API key                                                       |
+| `GOOGLE_CLIENT_ID`        | OAuth client ID (recommended)                                        |
+| `GOOGLE_CLIENT_SECRET`    | OAuth client secret (recommended)                                    |
+| `GOOGLE_REFRESH_TOKEN`    | OAuth refresh token (recommended)                                    |
+| `GOOGLE_CREDENTIALS_JSON` | Full JSON content of service account key file (alternative to OAuth) |
+| `ALLOWED_CHAT_ID`         | (Optional) Chat ID to restrict the bot to                            |
+| `CONFIG_PATH`             | `stores.json` (or leave unset for default)                           |
+
+Use either the three OAuth variables or `GOOGLE_CREDENTIALS_JSON`. See [Google setup](google-setup.md) for details.
 
 Make sure to set these for **Production**, **Preview**, and **Development** as needed.
 

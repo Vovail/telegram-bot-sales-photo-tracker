@@ -33,7 +33,7 @@ function makeBatch(overrides: Partial<PhotoBatch> = {}): PhotoBatch {
   return {
     senderId: "user-123",
     senderPhone: "+1111111111",
-    storeId: "",
+    storeId: "STORE_1",
     photos: [
       { buffer: Buffer.from("photo1"), format: "jpeg", receivedAt: new Date() },
     ],
@@ -147,11 +147,7 @@ describe("TelegramBotController.handlePhotoBatch", () => {
   });
 
   describe("Store identification", () => {
-    it("identifies store by registered phone", async () => {
-      mocks.storeIdentifier.identifyByPhone.mockReturnValue({
-        storeId: "STORE_1",
-        method: "phone",
-      });
+    it("processes batch when storeId is pre-set", async () => {
       mocks.visionParser.parsePhoto.mockResolvedValue(
         makeParseResult([
           { type: "date_marker", date: "2026-03-20", position: 1 },
@@ -170,37 +166,21 @@ describe("TelegramBotController.handlePhotoBatch", () => {
       } as UploadResult);
       mocks.sheetsWriter.writeRecords.mockResolvedValue(1);
 
-      const batch = makeBatch({ senderPhone: "+1111111111" });
+      const batch = makeBatch({ storeId: "STORE_1" });
       await controller.handlePhotoBatch(batch);
 
-      expect(mocks.storeIdentifier.identifyByPhone).toHaveBeenCalledWith(
-        "+1111111111",
-      );
       expect(batch.storeId).toBe("STORE_1");
+      expect(mocks.sheetsWriter.writeRecords).toHaveBeenCalled();
     });
 
-    it("prompts for Store_ID when phone is unregistered", async () => {
-      mocks.storeIdentifier.identifyByPhone.mockReturnValue(undefined);
-
-      const batch = makeBatch({ senderPhone: "+9999999999" });
+    it("returns early with error when storeId is empty", async () => {
+      const batch = makeBatch({ storeId: "" });
       await controller.handlePhotoBatch(batch);
 
       const botApi = (controller as any).bot.api;
       expect(botApi.sendMessage).toHaveBeenCalledWith(
         "user-123",
-        expect.stringContaining("not registered"),
-      );
-      expect(mocks.visionParser.parsePhoto).not.toHaveBeenCalled();
-    });
-
-    it("prompts for Store_ID when no phone is available", async () => {
-      const batch = makeBatch({ senderPhone: undefined });
-      await controller.handlePhotoBatch(batch);
-
-      const botApi = (controller as any).bot.api;
-      expect(botApi.sendMessage).toHaveBeenCalledWith(
-        "user-123",
-        expect.stringContaining("Could not detect your phone number"),
+        expect.stringContaining("no store selected"),
       );
       expect(mocks.visionParser.parsePhoto).not.toHaveBeenCalled();
     });
@@ -510,7 +490,13 @@ describe("TelegramBotController.handlePhotoBatch", () => {
 
   describe("Error handling", () => {
     it("catches unexpected errors and notifies user", async () => {
-      mocks.storeIdentifier.identifyByPhone.mockImplementation(() => {
+      mocks.visionParser.parsePhoto.mockResolvedValue(
+        makeParseResult([
+          { type: "date_marker", date: "2026-03-20", position: 1 },
+          { type: "sales_record", name: "Item", price: 50, position: 2 },
+        ]),
+      );
+      mocks.dateAssigner.assignDates.mockImplementation(() => {
         throw new Error("Unexpected crash");
       });
 

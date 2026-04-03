@@ -32,11 +32,18 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  const googleClientId = process.env.GOOGLE_CLIENT_ID;
+  const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  const googleRefreshToken = process.env.GOOGLE_REFRESH_TOKEN;
   const googleCredentialsPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
-  if (!googleCredentialsPath) {
+
+  const useOAuth = googleClientId && googleClientSecret && googleRefreshToken;
+
+  if (!useOAuth && !googleCredentialsPath) {
     logger.error("startup_failed", {
       error:
-        "Missing required environment variable: GOOGLE_APPLICATION_CREDENTIALS",
+        "Set either GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET + GOOGLE_REFRESH_TOKEN (OAuth) " +
+        "or GOOGLE_APPLICATION_CREDENTIALS (service account)",
     });
     process.exit(1);
   }
@@ -58,14 +65,26 @@ async function main(): Promise<void> {
   const genAI = new GoogleGenerativeAI(geminiApiKey);
   const geminiModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-  // 4. Initialize Google APIs (Drive and Sheets) using service account
-  const auth = new google.auth.GoogleAuth({
-    keyFile: googleCredentialsPath,
-    scopes: [
-      "https://www.googleapis.com/auth/drive",
-      "https://www.googleapis.com/auth/spreadsheets",
-    ],
-  });
+  // 4. Initialize Google APIs (Drive and Sheets)
+  let auth;
+  if (useOAuth) {
+    const oauth2Client = new google.auth.OAuth2(
+      googleClientId,
+      googleClientSecret,
+    );
+    oauth2Client.setCredentials({ refresh_token: googleRefreshToken });
+    auth = oauth2Client;
+    logger.info("google_auth", { details: { method: "oauth2" } });
+  } else {
+    auth = new google.auth.GoogleAuth({
+      keyFile: googleCredentialsPath!,
+      scopes: [
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/spreadsheets",
+      ],
+    });
+    logger.info("google_auth", { details: { method: "service_account" } });
+  }
 
   const drive = google.drive({ version: "v3", auth });
   const sheets = google.sheets({ version: "v4", auth });

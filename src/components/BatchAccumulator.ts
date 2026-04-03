@@ -62,10 +62,30 @@ export class BatchAccumulator {
   }
 
   /**
+   * Finalize the pending batch with a pre-assigned storeId.
+   * Used when the user manually selects a store via inline buttons.
+   */
+  processWithStore(senderId: string, storeId: string): void {
+    const pending = this.pendingBatches.get(senderId);
+    if (!pending) {
+      return;
+    }
+    clearTimeout(pending.timer);
+    this.finalizeBatch(senderId, storeId);
+  }
+
+  /**
    * Returns whether a pending batch exists for the given sender.
    */
   hasPendingBatch(senderId: string): boolean {
     return this.pendingBatches.has(senderId);
+  }
+
+  /**
+   * Returns the pending batch for the given sender, or undefined if none exists.
+   */
+  getPendingBatch(senderId: string): PendingBatch | undefined {
+    return this.pendingBatches.get(senderId);
   }
 
   /**
@@ -85,7 +105,7 @@ export class BatchAccumulator {
     }, BATCH_TIMEOUT_MS);
   }
 
-  private finalizeBatch(senderId: string): void {
+  private finalizeBatch(senderId: string, storeId?: string): void {
     const pending = this.pendingBatches.get(senderId);
     if (!pending) {
       return;
@@ -96,12 +116,20 @@ export class BatchAccumulator {
     const batch: PhotoBatch = {
       senderId: pending.senderId,
       senderPhone: pending.senderPhone,
-      storeId: "", // Set later by the pipeline
+      storeId: storeId ?? "", // Pre-set if provided, otherwise set later by the pipeline
       photos: pending.photos,
     };
 
     if (this.callback) {
-      this.callback(batch);
+      const result = this.callback(batch);
+      if (result && typeof result.catch === "function") {
+        result.catch((error) => {
+          console.error(
+            "Unhandled error in batch callback:",
+            error instanceof Error ? error.message : error,
+          );
+        });
+      }
     }
   }
 }

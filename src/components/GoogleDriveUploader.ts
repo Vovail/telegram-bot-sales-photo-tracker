@@ -54,6 +54,7 @@ export class GoogleDriveUploader {
         requestBody: fileMetadata,
         media,
         fields: "id",
+        supportsAllDrives: true,
       });
 
       const fileId = createResponse.data.id;
@@ -70,6 +71,7 @@ export class GoogleDriveUploader {
           role: "reader",
           type: "anyone",
         },
+        supportsAllDrives: true,
       });
 
       const shareableLink = `https://drive.google.com/file/d/${fileId}/view?usp=sharing`;
@@ -101,6 +103,8 @@ export class GoogleDriveUploader {
       q: query,
       fields: "files(id, name)",
       spaces: "drive",
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
     });
 
     const existing = listResponse.data.files;
@@ -115,6 +119,7 @@ export class GoogleDriveUploader {
         parents: [parentFolderId],
       },
       fields: "id",
+      supportsAllDrives: true,
     });
 
     const folderId = createResponse.data.id;

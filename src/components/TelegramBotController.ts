@@ -68,15 +68,91 @@ export class TelegramBotController {
   }
 
   /**
+   * Try to identify the store for a sender by phone number.
+   * Returns the storeId if found, undefined otherwise.
+   */
+  private identifyStoreForSender(
+    senderPhone: string | undefined,
+  ): string | undefined {
+    if (senderPhone) {
+      const result = this.storeIdentifier.identifyByPhone(senderPhone);
+      if (result) return result.storeId;
+    }
+    // Auto-select if only one store configured
+    if (this.config.stores.length === 1) {
+      return this.config.stores[0].storeId;
+    }
+    return undefined;
+  }
+
+  /**
+   * Build an InlineKeyboard with one button per store for store selection.
+   */
+  private buildStoreSelectionKeyboard(): InlineKeyboard {
+    const keyboard = new InlineKeyboard();
+    for (const store of this.config.stores) {
+      keyboard.text(store.storeId, `store_select:${store.storeId}`).row();
+    }
+    return keyboard;
+  }
+
+  /**
+   * Attempt to process the batch for a sender. If store can't be identified,
+   * show store selection buttons instead.
+   */
+  private async triggerProcessing(
+    senderId: string,
+    chatId: string | number,
+  ): Promise<void> {
+    if (!this.batchAccumulator.hasPendingBatch(senderId)) {
+      await this.sendMessage(
+        String(chatId),
+        "📭 No photos to process. Send some photos first!",
+      );
+      return;
+    }
+
+    // Try to identify store from phone (stored in pending batch)
+    const pending = this.batchAccumulator.getPendingBatch(senderId);
+    const storeId = this.identifyStoreForSender(pending?.senderPhone);
+
+    if (storeId) {
+      this.batchAccumulator.processWithStore(senderId, storeId);
+      await this.sendMessage(
+        String(chatId),
+        "⚡ Processing your photos now...",
+      );
+    } else {
+      // Show store selection buttons
+      if (!this.bot) return;
+      const keyboard = this.buildStoreSelectionKeyboard();
+      await this.bot.api.sendMessage(
+        Number(chatId),
+        "🏪 Please select your store:",
+        {
+          reply_markup: keyboard,
+        },
+      );
+    }
+  }
+
+  /**
    * Register all message/command/callback handlers on the bot.
    */
   private registerHandlers(): void {
     if (!this.bot) return;
 
-    // Photo handler
-    this.bot.on("message:photo", async (ctx) => {
-      if (!this.isChatAllowed(ctx.chat.id)) return;
-      const photos = ctx.message.photo;
+    // Shared photo handling logic
+    const handlePhoto = async (
+      ctx: {
+        chat: { id: number };
+        from?: { id: number; phone_number?: string };
+        message?: { photo: { file_id: string }[] };
+        api: { getFile: (id: string) => Promise<{ file_path?: string }> };
+        reply: (text: string, options?: object) => Promise<unknown>;
+      },
+      photos: { file_id: string }[],
+    ) => {
       const largest = photos[photos.length - 1];
 
       const file = await ctx.api.getFile(largest.file_id);
@@ -99,14 +175,22 @@ export class TelegramBotController {
         receivedAt: new Date(),
       };
 
-      const senderId = String(ctx.from?.id ?? ctx.message.chat.id);
-      // grammY User type doesn't expose phone_number but Telegram API may provide it
+      const senderId = String(ctx.chat.id);
       const fromUser = ctx.from as unknown as
         | { phone_number?: string }
         | undefined;
       const senderPhone = fromUser?.phone_number;
 
       this.batchAccumulator.addPhoto(senderId, senderPhone, telegramPhoto);
+
+      this.logger.info("photo_added", {
+        senderId,
+        details: {
+          chatId: ctx.chat.id,
+          fromId: ctx.from?.id,
+          format: telegramPhoto.format,
+        },
+      });
 
       await ctx.reply(
         "📸 Photo received! Send more or press Process Now when ready.",
@@ -117,24 +201,58 @@ export class TelegramBotController {
         "process_now",
       );
       await ctx.reply("Ready to process?", { reply_markup: keyboard });
+    };
+
+    // Photo handler — direct messages and groups
+    this.bot.on("message:photo", async (ctx) => {
+      if (!this.isChatAllowed(ctx.chat.id)) return;
+      await handlePhoto(ctx, ctx.message.photo);
     });
 
-    // "Process Now" command
+    // Photo handler — channel posts
+    this.bot.on("channel_post:photo", async (ctx) => {
+      if (!this.isChatAllowed(ctx.chat.id)) return;
+      await handlePhoto(ctx as any, ctx.channelPost.photo);
+    });
+
+    // "Process Now" command — direct messages and groups
     this.bot.command("process", async (ctx) => {
       if (!this.isChatAllowed(ctx.chat.id)) return;
-      const senderId = String(ctx.from?.id ?? ctx.message?.chat.id);
-      this.batchAccumulator.processNow(senderId);
-      await ctx.reply("⚡ Processing your photos now...");
+      const senderId = String(ctx.chat.id);
+      await this.triggerProcessing(senderId, ctx.chat.id);
     });
 
-    // Inline button handler for "Process Now"
+    // "Process Now" command — channel posts
+    this.bot.on("channel_post:text", async (ctx) => {
+      if (!this.isChatAllowed(ctx.chat.id)) return;
+      const text = ctx.channelPost.text?.trim();
+      if (text === "/process" || text?.startsWith("/process ")) {
+        const senderId = String(ctx.chat.id);
+        await this.triggerProcessing(senderId, ctx.chat.id);
+      }
+    });
+
+    // Inline button handler for "Process Now" and store selection
     this.bot.on("callback_query:data", async (ctx) => {
       if (!this.isChatAllowed(ctx.chat?.id ?? 0)) return;
-      if (ctx.callbackQuery.data === "process_now") {
-        const senderId = String(ctx.from.id);
-        this.batchAccumulator.processNow(senderId);
-        await ctx.answerCallbackQuery({ text: "Processing started!" });
-        await ctx.reply("⚡ Processing your photos now...");
+      const data = ctx.callbackQuery.data;
+
+      if (data === "process_now") {
+        const senderId = String(ctx.chat!.id);
+        await ctx.answerCallbackQuery({ text: "Processing..." });
+        await this.triggerProcessing(senderId, ctx.chat!.id);
+      } else if (data.startsWith("store_select:")) {
+        const storeId = data.substring("store_select:".length);
+        const senderId = String(ctx.chat!.id);
+
+        if (!this.batchAccumulator.hasPendingBatch(senderId)) {
+          await ctx.answerCallbackQuery({ text: "No photos to process." });
+          return;
+        }
+
+        this.batchAccumulator.processWithStore(senderId, storeId);
+        await ctx.answerCallbackQuery({ text: `Store: ${storeId}` });
+        await ctx.reply(`⚡ Processing your photos for ${storeId}...`);
       }
     });
 
@@ -213,38 +331,16 @@ export class TelegramBotController {
     });
 
     try {
-      // 1. Identify store
-      if (batch.senderPhone) {
-        const result = this.storeIdentifier.identifyByPhone(batch.senderPhone);
-        if (result) {
-          batch.storeId = result.storeId;
-        } else {
-          // Unregistered phone — prompt for manual Store_ID
-          const validIds = this.config.stores.map((s) => s.storeId).join(", ");
-          await this.sendMessage(
-            batch.senderId,
-            `📋 Your phone number is not registered. Please provide your Store ID.\nValid Store IDs: ${validIds}`,
-          );
-          // TODO: Implement interactive flow where user replies with a Store_ID.
-          // For now, we just prompt and return. The manual reply handling can be
-          // added as a future enhancement via a conversation state machine.
-          this.logger.warn("unregistered_phone", {
-            senderId: batch.senderId,
-            details: { senderPhone: batch.senderPhone },
-          });
-          return;
-        }
-      } else {
-        // No phone available — prompt for manual Store_ID
-        const validIds = this.config.stores.map((s) => s.storeId).join(", ");
+      // 1. Validate store is set (should be pre-assigned by triggerProcessing or processWithStore)
+      if (!batch.storeId) {
+        this.logger.error("batch_missing_store", {
+          senderId: batch.senderId,
+          error: "Batch reached handlePhotoBatch without a storeId",
+        });
         await this.sendMessage(
           batch.senderId,
-          `📋 Could not detect your phone number. Please provide your Store ID.\nValid Store IDs: ${validIds}`,
+          "❌ Processing failed: no store selected. Please try again.",
         );
-        // TODO: Implement interactive manual Store_ID flow as a future enhancement.
-        this.logger.warn("no_phone_number", {
-          senderId: batch.senderId,
-        });
         return;
       }
 

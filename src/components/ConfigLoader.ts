@@ -73,14 +73,14 @@ export class ConfigLoader {
         throw new Error(`${prefix}: 'storeId' must be a non-empty string`);
       }
 
-      if (
-        typeof store.registeredPhone !== "string" ||
-        store.registeredPhone.trim() === ""
-      ) {
-        throw new Error(
-          `${prefix}: 'registeredPhone' must be a non-empty string`,
-        );
-      }
+      // if (
+      //   typeof store.registeredPhone !== "string" ||
+      //   store.registeredPhone.trim() === ""
+      // ) {
+      //   throw new Error(
+      //     `${prefix}: 'registeredPhone' must be a non-empty string`,
+      //   );
+      // }
 
       if (
         typeof store.sheetDocumentId !== "string" ||

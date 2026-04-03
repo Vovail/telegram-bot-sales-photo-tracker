@@ -10,6 +10,7 @@
         "start:poll": "node dist/index.js",
         "set-webhook": "npx tsx scripts/set-webhook.ts",
         "remove-webhook": "npx tsx scripts/set-webhook.ts --remove",
+        "get-oauth-token": "npx tsx scripts/get-oauth-token.ts",
         "test": "vitest --run"
     },
     "keywords": [],
