@@ -12,10 +12,10 @@ import { GoogleSheetsWriter } from "../src/components/GoogleSheetsWriter.js";
 import { Logger } from "../src/components/Logger.js";
 import { TelegramBotController } from "../src/components/TelegramBotController.js";
 
-let handler: ((req: Request) => Promise<Response>) | undefined;
+let cachedHandler: ((req: Request) => Promise<Response>) | undefined;
 
 function getHandler(): (req: Request) => Promise<Response> {
-  if (handler) return handler;
+  if (cachedHandler) return cachedHandler;
 
   const logger = new Logger();
 
@@ -90,11 +90,11 @@ function getHandler(): (req: Request) => Promise<Response> {
     allowedChatId,
   );
 
-  handler = controller.getWebhookHandler();
-  return handler;
+  cachedHandler = controller.getWebhookHandler();
+  return cachedHandler;
 }
 
-export default async function POST(req: Request): Promise<Response> {
+export default async function handler(req: Request): Promise<Response> {
   try {
     const handle = getHandler();
     return await handle(req);
