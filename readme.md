@@ -161,6 +161,7 @@ See [Vercel Deployment Setup](docs/vercel-setup.md) for full instructions includ
 - [Gemini API Setup](docs/gemini-setup.md)
 - [Vercel Deployment Setup](docs/vercel-setup.md)
 - [Configuration Reference](docs/configuration.md)
+- [Maintenance & Troubleshooting](docs/maintenance.md) — webhook management, pausing the bot, deleting Vercel deployments
 
 ## License
 
