@@ -26,9 +26,10 @@
     },
     "devDependencies": {
         "@types/node": "^25.5.0",
+        "@vercel/node": "^5.7.0",
         "fast-check": "^4.6.0",
         "typescript": "^6.0.2",
-        "vitest": "^4.1.2",
-        "vercel": "50.38.3"
+        "vercel": "50.38.3",
+        "vitest": "^4.1.2"
     }
 }

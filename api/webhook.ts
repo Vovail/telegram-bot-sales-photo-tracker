@@ -12,20 +12,19 @@ import { GoogleSheetsWriter } from "../src/components/GoogleSheetsWriter.js";
 import { Logger } from "../src/components/Logger.js";
 import { TelegramBotController } from "../src/components/TelegramBotController.js";
 
-let cachedHandler: ((req: Request) => Promise<Response>) | undefined;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let cachedHandler: ((req: any, res: any) => Promise<void>) | undefined;
 
-function getHandler(): (req: Request) => Promise<Response> {
+function getHandler() {
   if (cachedHandler) return cachedHandler;
 
   const logger = new Logger();
-
   const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN;
   const geminiApiKey = process.env.GEMINI_API_KEY;
   const googleCredentials = process.env.GOOGLE_CREDENTIALS_JSON;
   const googleClientId = process.env.GOOGLE_CLIENT_ID;
   const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
   const googleRefreshToken = process.env.GOOGLE_REFRESH_TOKEN;
-
   const useOAuth = googleClientId && googleClientSecret && googleRefreshToken;
 
   if (!telegramBotToken || !geminiApiKey || (!useOAuth && !googleCredentials)) {
@@ -46,7 +45,6 @@ function getHandler(): (req: Request) => Promise<Response> {
   const genAI = new GoogleGenerativeAI(geminiApiKey);
   const geminiModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-  // Initialize Google auth — prefer OAuth, fall back to service account
   let auth;
   if (useOAuth) {
     const oauth2Client = new google.auth.OAuth2(
@@ -90,17 +88,19 @@ function getHandler(): (req: Request) => Promise<Response> {
     allowedChatId,
   );
 
-  cachedHandler = controller.getWebhookHandler();
+  cachedHandler = controller.getExpressWebhookHandler();
   return cachedHandler;
 }
 
-export default async function handler(req: Request): Promise<Response> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export default async function handler(req: any, res: any): Promise<void> {
   try {
+    console.log("Incoming update:", JSON.stringify(req.body));
     const handle = getHandler();
-    return await handle(req);
+    await handle(req, res);
   } catch (error) {
     console.error("Webhook error:", error);
-    // Always return 200 to Telegram so it doesn't retry endlessly
-    return new Response("OK", { status: 200 });
+    res.statusCode = 200;
+    res.end("OK");
   }
 }

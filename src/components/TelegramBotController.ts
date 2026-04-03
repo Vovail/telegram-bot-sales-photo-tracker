@@ -324,6 +324,17 @@ export class TelegramBotController {
     return webhookCallback(bot, "std/http");
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  getExpressWebhookHandler(): (req: any, res: any) => Promise<void> {
+    const bot = this.initBot();
+
+    this.logger.info("bot_started", {
+      details: { message: "Telegram bot initialized in webhook mode" },
+    });
+
+    return webhookCallback(bot, "express");
+  }
+
   /**
    * Send a text message to a Telegram chat using the bot API.
    */
