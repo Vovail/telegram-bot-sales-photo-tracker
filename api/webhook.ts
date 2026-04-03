@@ -29,9 +29,12 @@ function getHandler(): (req: Request) => Promise<Response> {
     );
   }
 
-  const configPath = process.env.CONFIG_PATH ?? "stores.json";
   const configLoader = new ConfigLoader();
-  const storeConfig = configLoader.load(configPath);
+  const storesJson = process.env.STORES_CONFIG_JSON;
+  const configPath = process.env.CONFIG_PATH ?? "stores.json";
+  const storeConfig = storesJson
+    ? configLoader.loadFromJson(storesJson)
+    : configLoader.load(configPath);
 
   const genAI = new GoogleGenerativeAI(geminiApiKey);
   const geminiModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });

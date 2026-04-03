@@ -14,11 +14,22 @@ export class ConfigLoader {
       );
     }
 
+    return this.parseAndValidate(raw, `Config file at "${filePath}"`);
+  }
+
+  /**
+   * Load config from a raw JSON string (e.g., from an environment variable).
+   */
+  loadFromJson(jsonString: string): StoreConfig {
+    return this.parseAndValidate(jsonString, "STORES_CONFIG_JSON");
+  }
+
+  private parseAndValidate(raw: string, source: string): StoreConfig {
     let parsed: unknown;
     try {
       parsed = JSON.parse(raw);
     } catch {
-      throw new Error(`Config file at "${filePath}" contains invalid JSON`);
+      throw new Error(`${source} contains invalid JSON`);
     }
 
     const config = parsed as StoreConfig;
