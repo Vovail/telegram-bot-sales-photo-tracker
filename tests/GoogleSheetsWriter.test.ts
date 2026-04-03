@@ -31,7 +31,7 @@ describe("GoogleSheetsWriter", () => {
   describe("formatRow", () => {
     it("should produce 8-column row with all fields present", () => {
       const record = makeRecord({
-        model: "TS-100",
+        clothingType: "футболка",
         size: "L",
         color: "Синій",
         price: 25,
@@ -41,13 +41,13 @@ describe("GoogleSheetsWriter", () => {
       const row = GoogleSheetsWriter.formatRow(record);
       expect(row).toEqual([
         "2026-03-20",
+        "футболка",
         "Футболка",
-        "TS-100",
         "L",
         "Синій",
         "25",
-        "false",
-        "https://drive.google.com/file/d/abc/view",
+        "",
+        '=HYPERLINK("https://drive.google.com/file/d/abc/view";"20.03.2026")',
       ]);
       expect(row).toHaveLength(8);
     });
@@ -55,7 +55,7 @@ describe("GoogleSheetsWriter", () => {
     it("should use empty strings for missing optional fields", () => {
       const record = makeRecord();
       const row = GoogleSheetsWriter.formatRow(record);
-      expect(row).toEqual(["2026-03-20", "Футболка", "", "", "", "", "", ""]);
+      expect(row).toEqual(["2026-03-20", "", "Футболка", "", "", "", "", ""]);
       expect(row).toHaveLength(8);
     });
 
@@ -118,7 +118,9 @@ describe("GoogleSheetsWriter", () => {
       expect(mockSheets.spreadsheets.batchUpdate).toHaveBeenCalledWith({
         spreadsheetId: "sheet-id",
         requestBody: {
-          requests: [{ addSheet: { properties: { title: "2026-04" } } }],
+          requests: [
+            { addSheet: { properties: { title: "2026-04", index: 0 } } },
+          ],
         },
       });
 
@@ -129,14 +131,14 @@ describe("GoogleSheetsWriter", () => {
         requestBody: {
           values: [
             [
-              "Date",
-              "Item Name",
-              "Model",
-              "Size",
-              "Color",
-              "Price",
-              "Is Cashless",
-              "Photo Link",
+              "Дата",
+              "Тип",
+              "Назва",
+              "Розмір",
+              "Колір",
+              "Ціна",
+              "Безгот",
+              "Фото",
             ],
           ],
         },
@@ -153,6 +155,105 @@ describe("GoogleSheetsWriter", () => {
       await writer.ensureMonthTab("sheet-id", "2026-05");
 
       expect(mockSheets.spreadsheets.batchUpdate).toHaveBeenCalledOnce();
+    });
+
+    it("should insert newest month at position 0 (before older tabs)", async () => {
+      mockSheets.spreadsheets.get.mockResolvedValue({
+        data: {
+          sheets: [
+            { properties: { title: "2026-03", index: 0 } },
+            { properties: { title: "2026-01", index: 1 } },
+          ],
+        },
+      });
+      mockSheets.spreadsheets.batchUpdate.mockResolvedValue({});
+      mockSheets.spreadsheets.values.update.mockResolvedValue({});
+
+      await writer.ensureMonthTab("sheet-id", "2026-04");
+
+      expect(mockSheets.spreadsheets.batchUpdate).toHaveBeenCalledWith({
+        spreadsheetId: "sheet-id",
+        requestBody: {
+          requests: [
+            { addSheet: { properties: { title: "2026-04", index: 0 } } },
+          ],
+        },
+      });
+    });
+
+    it("should insert month between existing tabs in correct chronological order", async () => {
+      mockSheets.spreadsheets.get.mockResolvedValue({
+        data: {
+          sheets: [
+            { properties: { title: "2026-03", index: 0 } },
+            { properties: { title: "2026-01", index: 1 } },
+          ],
+        },
+      });
+      mockSheets.spreadsheets.batchUpdate.mockResolvedValue({});
+      mockSheets.spreadsheets.values.update.mockResolvedValue({});
+
+      await writer.ensureMonthTab("sheet-id", "2026-02");
+
+      // 2026-02 should go before 2026-01 (index 1) — between 2026-03 and 2026-01
+      expect(mockSheets.spreadsheets.batchUpdate).toHaveBeenCalledWith({
+        spreadsheetId: "sheet-id",
+        requestBody: {
+          requests: [
+            { addSheet: { properties: { title: "2026-02", index: 1 } } },
+          ],
+        },
+      });
+    });
+
+    it("should insert oldest month after all existing tabs", async () => {
+      mockSheets.spreadsheets.get.mockResolvedValue({
+        data: {
+          sheets: [
+            { properties: { title: "2026-04", index: 0 } },
+            { properties: { title: "2026-03", index: 1 } },
+          ],
+        },
+      });
+      mockSheets.spreadsheets.batchUpdate.mockResolvedValue({});
+      mockSheets.spreadsheets.values.update.mockResolvedValue({});
+
+      await writer.ensureMonthTab("sheet-id", "2026-01");
+
+      expect(mockSheets.spreadsheets.batchUpdate).toHaveBeenCalledWith({
+        spreadsheetId: "sheet-id",
+        requestBody: {
+          requests: [
+            { addSheet: { properties: { title: "2026-01", index: 2 } } },
+          ],
+        },
+      });
+    });
+
+    it("should skip non-month tabs when calculating insert position", async () => {
+      mockSheets.spreadsheets.get.mockResolvedValue({
+        data: {
+          sheets: [
+            { properties: { title: "Summary", index: 0 } },
+            { properties: { title: "2026-03", index: 1 } },
+            { properties: { title: "2026-01", index: 2 } },
+          ],
+        },
+      });
+      mockSheets.spreadsheets.batchUpdate.mockResolvedValue({});
+      mockSheets.spreadsheets.values.update.mockResolvedValue({});
+
+      await writer.ensureMonthTab("sheet-id", "2026-04");
+
+      // 2026-04 is newer than 2026-03 (at index 1), so insert at index 1
+      expect(mockSheets.spreadsheets.batchUpdate).toHaveBeenCalledWith({
+        spreadsheetId: "sheet-id",
+        requestBody: {
+          requests: [
+            { addSheet: { properties: { title: "2026-04", index: 1 } } },
+          ],
+        },
+      });
     });
   });
 
@@ -193,7 +294,7 @@ describe("GoogleSheetsWriter", () => {
       expect(mockSheets.spreadsheets.values.append).toHaveBeenCalledWith({
         spreadsheetId: "sheet-id",
         range: "2026-03!A:H",
-        valueInputOption: "RAW",
+        valueInputOption: "USER_ENTERED",
         insertDataOption: "INSERT_ROWS",
         requestBody: {
           values: [

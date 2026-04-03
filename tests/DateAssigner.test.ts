@@ -313,8 +313,8 @@ describe("DateAssigner", () => {
             { type: "date_marker", date: "2026-03-20", position: 1 },
             {
               type: "sales_record",
-              name: "Футболка",
-              model: "TS-100",
+              name: "TS-100",
+              clothingType: "футболка",
               size: "L",
               color: "Синій",
               price: 25,
@@ -329,7 +329,7 @@ describe("DateAssigner", () => {
       const result = assigner.assignDates(batch, "2026-01-01");
 
       const rec = result.records[0];
-      expect(rec.model).toBe("TS-100");
+      expect(rec.clothingType).toBe("футболка");
       expect(rec.size).toBe("L");
       expect(rec.color).toBe("Синій");
       expect(rec.isCashless).toBe(true);

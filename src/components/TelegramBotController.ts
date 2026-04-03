@@ -26,6 +26,7 @@ export class TelegramBotController {
   private botToken: string;
   private bot: Bot | undefined;
   private allowedChatId: string | undefined;
+  private replyDebounceTimers: Map<string, NodeJS.Timeout> = new Map();
 
   constructor(
     config: StoreConfig,
@@ -126,13 +127,9 @@ export class TelegramBotController {
       // Show store selection buttons
       if (!this.bot) return;
       const keyboard = this.buildStoreSelectionKeyboard();
-      await this.bot.api.sendMessage(
-        Number(chatId),
-        "🏪 Please select your store:",
-        {
-          reply_markup: keyboard,
-        },
-      );
+      await this.bot.api.sendMessage(Number(chatId), "🏪 Виберіть магазин:", {
+        reply_markup: keyboard,
+      });
     }
   }
 
@@ -192,15 +189,40 @@ export class TelegramBotController {
         },
       });
 
-      await ctx.reply(
-        "📸 Photo received! Send more or press Process Now when ready.",
-      );
+      // Debounce the reply so multiple photos sent together produce only one prompt
+      const existingTimer = this.replyDebounceTimers.get(senderId);
+      if (existingTimer) {
+        clearTimeout(existingTimer);
+      }
 
-      const keyboard = new InlineKeyboard().text(
-        "⚡ Process Now",
-        "process_now",
+      const pending = this.batchAccumulator.getPendingBatch(senderId);
+      const photoCount = pending?.photos.length ?? 1;
+
+      this.replyDebounceTimers.set(
+        senderId,
+        setTimeout(async () => {
+          this.replyDebounceTimers.delete(senderId);
+          try {
+            await ctx.reply(
+              `📸 ${photoCount} ${photoCount === 1 ? "фотографія" : "фотографій"} отримано! Додайте ще або натисніть "Опрацювати зараз"`,
+            );
+            const keyboard = new InlineKeyboard().text(
+              "⚡ Опрацювати зараз",
+              "process_now",
+            );
+            await ctx.reply("Готово для опрацювання?", {
+              reply_markup: keyboard,
+            });
+          } catch (err) {
+            this.logger.info("reply_debounce_error", {
+              senderId,
+              details: {
+                error: err instanceof Error ? err.message : String(err),
+              },
+            });
+          }
+        }, 1500),
       );
-      await ctx.reply("Ready to process?", { reply_markup: keyboard });
     };
 
     // Photo handler — direct messages and groups
@@ -252,7 +274,7 @@ export class TelegramBotController {
 
         this.batchAccumulator.processWithStore(senderId, storeId);
         await ctx.answerCallbackQuery({ text: `Store: ${storeId}` });
-        await ctx.reply(`⚡ Processing your photos for ${storeId}...`);
+        await ctx.reply(`⚡ Опрацьовую фото продаж: ${storeId}...`);
       }
     });
 
@@ -521,20 +543,26 @@ export class TelegramBotController {
         }
       }
 
-      // Set photoLink on the first record from each photo
-      const photoLinkSet = new Set<number>(); // track which photo indices already had their first record linked
+      // Set photoLink on the first record from each photo PER MONTH.
+      // When a single photo contains records spanning multiple months
+      // (e.g. 31.03 and 01.04), each month's first record gets the link
+      // so the photo appears in both month tabs.
+      const photoMonthLinkSet = new Set<string>(); // "photoIdx:YYYY-MM"
       for (let ri = 0; ri < dateResult.records.length; ri++) {
         const origPhotoIdx = recordPhotoIndex[ri];
         if (origPhotoIdx === undefined) continue;
 
-        // Find which parseResult index corresponds to this original photo index
         const parseResultIdx = photoIndexMap.indexOf(origPhotoIdx);
         if (parseResultIdx === -1) continue;
 
         const uploadResult = uploadResults[parseResultIdx];
-        if (uploadResult && !photoLinkSet.has(origPhotoIdx)) {
+        if (!uploadResult) continue;
+
+        const monthKey = dateResult.records[ri].date.substring(0, 7);
+        const key = `${origPhotoIdx}:${monthKey}`;
+        if (!photoMonthLinkSet.has(key)) {
           dateResult.records[ri].photoLink = uploadResult.shareableLink;
-          photoLinkSet.add(origPhotoIdx);
+          photoMonthLinkSet.add(key);
         }
       }
 
@@ -577,11 +605,37 @@ export class TelegramBotController {
         return;
       }
 
-      // 9. Send confirmation
-      await this.sendMessage(
-        batch.senderId,
-        `✅ Successfully recorded ${writtenCount} sales record(s) for store ${batch.storeId}.`,
+      // 9. Send confirmation with detailed summary
+      const summaryLines: string[] = [];
+      summaryLines.push(
+        `✅ Успішно збережено ${writtenCount} продаж для ${batch.storeId}.`,
       );
+
+      // Build per-day breakdown and collect tabs (months)
+      const perDay = new Map<string, number>();
+      const tabsCreated = new Set<string>();
+      for (const rec of dateResult.records) {
+        perDay.set(rec.date, (perDay.get(rec.date) ?? 0) + 1);
+        tabsCreated.add(rec.date.substring(0, 7));
+      }
+
+      // Day breakdown sorted chronologically
+      const sortedDays = [...perDay.entries()].sort((a, b) =>
+        a[0].localeCompare(b[0]),
+      );
+      summaryLines.push("");
+      summaryLines.push("📅 По днях:");
+      for (const [date, count] of sortedDays) {
+        const [y, m, d] = date.split("-");
+        summaryLines.push(`  ${d}.${m}.${y} — ${count} запис(ів)`);
+      }
+
+      // Tabs (month sheets)
+      const sortedTabs = [...tabsCreated].sort();
+      summaryLines.push("");
+      summaryLines.push(`📑 Вкладки: ${sortedTabs.join(", ")}`);
+
+      await this.sendMessage(batch.senderId, summaryLines.join("\n"));
 
       // 10. Log successful processing
       this.logger.info("batch_processed", {
@@ -607,7 +661,7 @@ export class TelegramBotController {
       try {
         await this.sendMessage(
           batch.senderId,
-          "❌ Processing failed due to an unexpected error. Please try resending your photos.",
+          "❌ Обробка фото не вдалася через несподівану помилку. Спробуйте надіслати фотографії ще раз.",
         );
       } catch {
         // If we can't even send the error message, just log it

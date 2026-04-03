@@ -44,8 +44,8 @@ export interface DateMarker {
 
 export interface SalesRecord {
   type: "sales_record";
+  clothingType?: string;
   name: string;
-  model?: string;
   size?: string;
   color?: string;
   price?: number;
@@ -64,8 +64,8 @@ export interface PhotoParseResult {
 
 export interface DatedSalesRecord {
   date: string; // YYYY-MM-DD
+  clothingType?: string;
   name: string;
-  model?: string;
   size?: string;
   color?: string;
   price?: number;

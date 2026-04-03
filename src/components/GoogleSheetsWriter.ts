@@ -2,14 +2,14 @@ import type { sheets_v4 } from "googleapis";
 import type { DatedSalesRecord } from "../types/index.js";
 
 const COLUMN_HEADERS = [
-  "Date",
-  "Item Name",
-  "Model",
-  "Size",
-  "Color",
-  "Price",
-  "Is Cashless",
-  "Photo Link",
+  "Дата",
+  "Тип",
+  "Назва",
+  "Розмір",
+  "Колір",
+  "Ціна",
+  "Безгот",
+  "Фото",
 ];
 
 const MAX_RETRIES = 3;
@@ -30,7 +30,8 @@ export class GoogleSheetsWriter {
 
   /**
    * Ensure a Month_Tab exists in the spreadsheet. If it doesn't exist,
-   * create it and add column headers.
+   * create it at the correct position (newest month first, descending
+   * chronological order among YYYY-MM tabs) and add column headers.
    */
   async ensureMonthTab(
     sheetDocumentId: string,
@@ -49,6 +50,16 @@ export class GoogleSheetsWriter {
       return;
     }
 
+    // Determine the correct insert position among existing YYYY-MM tabs.
+    // Tabs are ordered newest-first (descending), so find the first existing
+    // month tab that is older (lexicographically smaller) than the new one.
+    const MONTH_KEY_RE = /^\d{4}-\d{2}$/;
+    const insertIndex = this.findInsertIndex(
+      existingSheets,
+      monthKey,
+      MONTH_KEY_RE,
+    );
+
     await this.sheets.spreadsheets.batchUpdate({
       spreadsheetId: sheetDocumentId,
       requestBody: {
@@ -57,6 +68,7 @@ export class GoogleSheetsWriter {
             addSheet: {
               properties: {
                 title: monthKey,
+                index: insertIndex,
               },
             },
           },
@@ -76,19 +88,75 @@ export class GoogleSheetsWriter {
   }
 
   /**
+   * Find the sheet index where a new month tab should be inserted so that
+   * YYYY-MM tabs stay in descending (newest-first) order.
+   *
+   * Walks through existing sheets in order. For every sheet whose title
+   * matches the YYYY-MM pattern, compares it to the new monthKey.
+   * The new tab goes right before the first month tab that is
+   * lexicographically smaller (i.e. older).
+   * If no older month tab is found, the new tab is appended after the
+   * last month tab (or at position 0 if there are no month tabs at all).
+   */
+  private findInsertIndex(
+    existingSheets: {
+      properties?: { title?: string | null; index?: number | null } | null;
+    }[],
+    monthKey: string,
+    monthKeyRe: RegExp,
+  ): number {
+    // Collect month-tab indices in their current sheet order
+    const monthTabs: { title: string; index: number }[] = [];
+    for (const s of existingSheets) {
+      const title = s.properties?.title;
+      const idx = s.properties?.index;
+      if (title && idx != null && monthKeyRe.test(title)) {
+        monthTabs.push({ title, index: idx });
+      }
+    }
+
+    // Sort by their actual position in the spreadsheet
+    monthTabs.sort((a, b) => a.index - b.index);
+
+    // No month tabs yet — put at position 0 (front)
+    if (monthTabs.length === 0) {
+      return 0;
+    }
+
+    // Find the first month tab that is older (smaller) than the new key
+    for (const tab of monthTabs) {
+      if (tab.title < monthKey) {
+        return tab.index;
+      }
+    }
+
+    // All existing month tabs are newer — insert right after the last one
+    return monthTabs[monthTabs.length - 1].index + 1;
+  }
+
+  /**
    * Format a DatedSalesRecord into an 8-column row.
    * Missing optional fields become empty strings (never null/undefined).
+   * Photo link is rendered as a HYPERLINK formula showing the date as label.
    */
   static formatRow(record: DatedSalesRecord): string[] {
+    // Format date as DD.MM.YYYY for display
+    const [y, m, d] = record.date.split("-");
+    const displayDate = `${d}.${m}.${y}`;
+
+    const photoCell = record.photoLink
+      ? `=HYPERLINK("${record.photoLink}";"${displayDate}")`
+      : "";
+
     return [
       record.date,
+      record.clothingType ?? "",
       record.name,
-      record.model ?? "",
       record.size ?? "",
       record.color ?? "",
       record.price != null ? String(record.price) : "",
-      record.isCashless != null ? String(record.isCashless) : "",
-      record.photoLink ?? "",
+      record.isCashless === true ? "true" : "",
+      photoCell,
     ];
   }
 
@@ -149,7 +217,7 @@ export class GoogleSheetsWriter {
         await this.sheets.spreadsheets.values.append({
           spreadsheetId: sheetDocumentId,
           range: `${monthKey}!A:H`,
-          valueInputOption: "RAW",
+          valueInputOption: "USER_ENTERED",
           insertDataOption: "INSERT_ROWS",
           requestBody: {
             values: rows,

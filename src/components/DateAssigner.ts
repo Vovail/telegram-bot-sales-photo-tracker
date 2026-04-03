@@ -79,8 +79,8 @@ export class DateAssigner {
   private toDatedRecord(record: SalesRecord, date: string): DatedSalesRecord {
     return {
       date,
+      clothingType: record.clothingType,
       name: record.name,
-      model: record.model,
       size: record.size,
       color: record.color,
       price: record.price,

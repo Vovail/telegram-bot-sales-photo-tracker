@@ -343,7 +343,7 @@ describe("TelegramBotController.handlePhotoBatch", () => {
       const botApi = (controller as any).bot.api;
       expect(botApi.sendMessage).toHaveBeenCalledWith(
         "user-123",
-        expect.stringContaining("Successfully recorded"),
+        expect.stringContaining("Успішно збережено"),
       );
     });
 
@@ -412,7 +412,7 @@ describe("TelegramBotController.handlePhotoBatch", () => {
       const botApi = (controller as any).bot.api;
       expect(botApi.sendMessage).toHaveBeenCalledWith(
         "user-123",
-        expect.stringContaining("2 sales record(s)"),
+        expect.stringContaining("Успішно збережено 2 продаж"),
       );
     });
 
@@ -505,7 +505,7 @@ describe("TelegramBotController.handlePhotoBatch", () => {
       const botApi = (controller as any).bot.api;
       expect(botApi.sendMessage).toHaveBeenCalledWith(
         "user-123",
-        expect.stringContaining("unexpected error"),
+        expect.stringContaining("несподівану помилку"),
       );
       expect(mocks.logger.error).toHaveBeenCalledWith(
         "batch_processing_failed",

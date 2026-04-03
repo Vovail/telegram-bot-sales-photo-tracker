@@ -19,8 +19,8 @@ describe("VisionParser", () => {
       { type: "date_marker", date: "2026-03-20", position: 1 },
       {
         type: "sales_record",
-        name: "Футболка",
-        model: "TS-100",
+        clothingType: "футболка",
+        name: "TS-100",
         size: "L",
         color: "Синій",
         price: 25.0,
@@ -29,7 +29,8 @@ describe("VisionParser", () => {
       },
       {
         type: "sales_record",
-        name: "Джинси",
+        clothingType: "джинси",
+        name: "Levi's 501",
         size: "32",
         price: 45.0,
         isCashless: true,
@@ -51,14 +52,15 @@ describe("VisionParser", () => {
     });
     expect(result.elements[1]).toMatchObject({
       type: "sales_record",
-      name: "Футболка",
-      model: "TS-100",
+      clothingType: "футболка",
+      name: "TS-100",
       price: 25.0,
       isCashless: false,
     });
     expect(result.elements[2]).toMatchObject({
       type: "sales_record",
-      name: "Джинси",
+      clothingType: "джинси",
+      name: "Levi's 501",
       isCashless: true,
     });
   });
@@ -105,7 +107,13 @@ describe("VisionParser", () => {
   it("puts fallback text in name when name is empty but other fields exist", async () => {
     const response = JSON.stringify({
       elements: [
-        { type: "sales_record", name: "", model: "X1", size: "M", position: 1 },
+        {
+          type: "sales_record",
+          name: "",
+          clothingType: "кросівки",
+          size: "M",
+          position: 1,
+        },
       ],
     });
     const model = createMockModel(response);
@@ -128,7 +136,7 @@ describe("VisionParser", () => {
     const result = await parser.parsePhoto(Buffer.from("fake"));
 
     if (result.elements[0].type === "sales_record") {
-      expect(result.elements[0].model).toBeUndefined();
+      expect(result.elements[0].clothingType).toBeUndefined();
       expect(result.elements[0].size).toBeUndefined();
       expect(result.elements[0].color).toBeUndefined();
       expect(result.elements[0].isCashless).toBeUndefined();

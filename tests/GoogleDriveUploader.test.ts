@@ -103,6 +103,7 @@ describe("GoogleDriveUploader", () => {
       expect(mockDrive.permissions.create).toHaveBeenCalledWith({
         fileId: "new-file-id",
         requestBody: { role: "reader", type: "anyone" },
+        supportsAllDrives: true,
       });
     });
 
