@@ -104,3 +104,9 @@ export default async function handler(req: any, res: any): Promise<void> {
     res.end("OK");
   }
 }
+
+export const config = {
+  api: {
+    bodyParser: true, // keep Vercel's body parser; our handler re-injects req.body
+  },
+};

@@ -332,7 +332,25 @@ export class TelegramBotController {
       details: { message: "Telegram bot initialized in webhook mode" },
     });
 
-    return webhookCallback(bot, "express");
+    const cb = webhookCallback(bot, "http");
+
+    return async (req: any, res: any) => {
+      // Vercel pre-parses req.body before the handler runs.
+      // grammY's "http" adapter reads the raw stream, so we re-inject the
+      // parsed body as a Readable stream to avoid a double-parse conflict.
+      if (req.body && typeof req.body === "object") {
+        const { Readable } = await import("stream");
+        const bodyStr = JSON.stringify(req.body);
+        const readable = new Readable({ read() {} });
+        readable.push(bodyStr);
+        readable.push(null);
+        (readable as any).headers = req.headers;
+        (readable as any).method = req.method;
+        await cb(readable as any, res);
+      } else {
+        await cb(req, res);
+      }
+    };
   }
 
   /**
