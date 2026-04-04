@@ -26,7 +26,6 @@ export class TelegramBotController {
   private botToken: string;
   private bot: Bot | undefined;
   private allowedChatId: string | undefined;
-  private replyDebounceTimers: Map<string, NodeJS.Timeout> = new Map();
 
   constructor(
     config: StoreConfig,
@@ -189,40 +188,30 @@ export class TelegramBotController {
         },
       });
 
-      // Debounce the reply so multiple photos sent together produce only one prompt
-      const existingTimer = this.replyDebounceTimers.get(senderId);
-      if (existingTimer) {
-        clearTimeout(existingTimer);
-      }
-
       const pending = this.batchAccumulator.getPendingBatch(senderId);
       const photoCount = pending?.photos.length ?? 1;
 
-      this.replyDebounceTimers.set(
-        senderId,
-        setTimeout(async () => {
-          this.replyDebounceTimers.delete(senderId);
-          try {
-            await ctx.reply(
-              `📸 ${photoCount} ${photoCount === 1 ? "фотографія" : "фотографій"} отримано! Додайте ще або натисніть "Опрацювати зараз"`,
-            );
-            const keyboard = new InlineKeyboard().text(
-              "⚡ Опрацювати зараз",
-              "process_now",
-            );
-            await ctx.reply("Готово для опрацювання?", {
-              reply_markup: keyboard,
-            });
-          } catch (err) {
-            this.logger.info("reply_debounce_error", {
-              senderId,
-              details: {
-                error: err instanceof Error ? err.message : String(err),
-              },
-            });
-          }
-        }, 1500),
-      );
+      // In serverless environments (Vercel), setTimeout-based debouncing doesn't
+      // work because the process exits after the response is sent. Reply immediately.
+      try {
+        await ctx.reply(
+          `📸 ${photoCount} ${photoCount === 1 ? "фотографія" : "фотографій"} отримано! Додайте ще або натисніть "Опрацювати зараз"`,
+        );
+        const keyboard = new InlineKeyboard().text(
+          "⚡ Опрацювати зараз",
+          "process_now",
+        );
+        await ctx.reply("Готово для опрацювання?", {
+          reply_markup: keyboard,
+        });
+      } catch (err) {
+        this.logger.info("reply_error", {
+          senderId,
+          details: {
+            error: err instanceof Error ? err.message : String(err),
+          },
+        });
+      }
     };
 
     // Photo handler — direct messages and groups
