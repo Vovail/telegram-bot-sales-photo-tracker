@@ -53,6 +53,8 @@ export class TelegramBotController {
     this.allowedChatId = allowedChatId;
   }
 
+  private botInitialized = false;
+
   /**
    * Initialize the bot instance and register all handlers.
    * Called by both start() (polling) and getWebhookHandler() (serverless).
@@ -67,6 +69,19 @@ export class TelegramBotController {
 
     this.registerHandlers();
     return this.bot;
+  }
+
+  /**
+   * Returns the bot ready for direct handleUpdate calls.
+   * Calls bot.init() once to fetch botInfo from Telegram (cached after first call).
+   */
+  async getBotReady(): Promise<Bot> {
+    const bot = this.initBot();
+    if (!this.botInitialized) {
+      await bot.init();
+      this.botInitialized = true;
+    }
+    return bot;
   }
 
   /**
@@ -323,15 +338,6 @@ export class TelegramBotController {
     });
 
     return webhookCallback(bot, "std/http");
-  }
-
-  /**
-   * Returns the initialized bot instance for direct update handling.
-   * Use this in serverless environments where you need to control
-   * the response lifecycle independently of grammY's webhook callback.
-   */
-  getBot(): Bot {
-    return this.initBot();
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

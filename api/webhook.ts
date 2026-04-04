@@ -100,7 +100,7 @@ export default async function handler(req: any, res: any): Promise<void> {
     console.log("Incoming update:", JSON.stringify(req.body));
 
     const controller = getController();
-    const bot = controller.getBot();
+    const bot = await controller.getBotReady();
     const update = req.body;
 
     // Respond to Telegram immediately — grammY's internal 10s timeout
