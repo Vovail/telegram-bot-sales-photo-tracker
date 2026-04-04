@@ -13,11 +13,9 @@ import { Logger } from "../src/components/Logger.js";
 import { TelegramBotController } from "../src/components/TelegramBotController.js";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-let cachedHandler: ((req: any, res: any) => Promise<void>) | undefined;
+let cachedController: ReturnType<typeof buildController> | undefined;
 
-function getHandler() {
-  if (cachedHandler) return cachedHandler;
-
+function buildController() {
   const logger = new Logger();
   const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN;
   const geminiApiKey = process.env.GEMINI_API_KEY;
@@ -88,25 +86,50 @@ function getHandler() {
     allowedChatId,
   );
 
-  cachedHandler = controller.getExpressWebhookHandler();
-  return cachedHandler;
+  return controller;
+}
+
+function getController() {
+  if (!cachedController) cachedController = buildController();
+  return cachedController;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export default async function handler(req: any, res: any): Promise<void> {
   try {
     console.log("Incoming update:", JSON.stringify(req.body));
-    const handle = getHandler();
-    await handle(req, res);
-  } catch (error) {
-    console.error("Webhook error:", error);
+
+    const controller = getController();
+    const bot = controller.getBot();
+    const update = req.body;
+
+    // Respond to Telegram immediately — grammY's internal 10s timeout
+    // fires if we don't reply fast enough. Processing happens in the background.
     res.statusCode = 200;
     res.end("OK");
+
+    // waitUntil keeps the Vercel function alive until processing completes,
+    // even after the response has been sent.
+    const processing = bot.handleUpdate(update).catch((error) => {
+      console.error("Update processing error:", error);
+    });
+
+    if (typeof (globalThis as any).waitUntil === "function") {
+      (globalThis as any).waitUntil(processing);
+    } else {
+      await processing;
+    }
+  } catch (error) {
+    console.error("Webhook error:", error);
+    if (!res.writableEnded) {
+      res.statusCode = 200;
+      res.end("OK");
+    }
   }
 }
 
 export const config = {
   api: {
-    bodyParser: true, // keep Vercel's body parser; our handler re-injects req.body
+    bodyParser: true,
   },
 };

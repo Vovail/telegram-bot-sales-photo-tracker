@@ -325,6 +325,15 @@ export class TelegramBotController {
     return webhookCallback(bot, "std/http");
   }
 
+  /**
+   * Returns the initialized bot instance for direct update handling.
+   * Use this in serverless environments where you need to control
+   * the response lifecycle independently of grammY's webhook callback.
+   */
+  getBot(): Bot {
+    return this.initBot();
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getExpressWebhookHandler(): (req: any, res: any) => Promise<void> {
     const bot = this.initBot();
