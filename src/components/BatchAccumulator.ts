@@ -52,26 +52,26 @@ export class BatchAccumulator {
    * Immediately finalize the pending batch for the given sender
    * and trigger the registered callback.
    */
-  processNow(senderId: string): void {
+  processNow(senderId: string): Promise<void> {
     const pending = this.pendingBatches.get(senderId);
     if (!pending) {
-      return;
+      return Promise.resolve();
     }
     clearTimeout(pending.timer);
-    this.finalizeBatch(senderId);
+    return this.finalizeBatch(senderId);
   }
 
   /**
    * Finalize the pending batch with a pre-assigned storeId.
    * Used when the user manually selects a store via inline buttons.
    */
-  processWithStore(senderId: string, storeId: string): void {
+  processWithStore(senderId: string, storeId: string): Promise<void> {
     const pending = this.pendingBatches.get(senderId);
     if (!pending) {
-      return;
+      return Promise.resolve();
     }
     clearTimeout(pending.timer);
-    this.finalizeBatch(senderId, storeId);
+    return this.finalizeBatch(senderId, storeId);
   }
 
   /**
@@ -105,10 +105,10 @@ export class BatchAccumulator {
     }, BATCH_TIMEOUT_MS);
   }
 
-  private finalizeBatch(senderId: string, storeId?: string): void {
+  private finalizeBatch(senderId: string, storeId?: string): Promise<void> {
     const pending = this.pendingBatches.get(senderId);
     if (!pending) {
-      return;
+      return Promise.resolve();
     }
 
     this.pendingBatches.delete(senderId);
@@ -116,20 +116,18 @@ export class BatchAccumulator {
     const batch: PhotoBatch = {
       senderId: pending.senderId,
       senderPhone: pending.senderPhone,
-      storeId: storeId ?? "", // Pre-set if provided, otherwise set later by the pipeline
+      storeId: storeId ?? "",
       photos: pending.photos,
     };
 
     if (this.callback) {
-      const result = this.callback(batch);
-      if (result && typeof result.catch === "function") {
-        result.catch((error) => {
-          console.error(
-            "Unhandled error in batch callback:",
-            error instanceof Error ? error.message : error,
-          );
-        });
-      }
+      return Promise.resolve(this.callback(batch)).catch((error) => {
+        console.error(
+          "Unhandled error in batch callback:",
+          error instanceof Error ? error.message : error,
+        );
+      });
     }
+    return Promise.resolve();
   }
 }

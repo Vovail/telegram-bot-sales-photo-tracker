@@ -26,6 +26,8 @@ export class TelegramBotController {
   private botToken: string;
   private bot: Bot | undefined;
   private allowedChatId: string | undefined;
+  private replyDebounceTimers: Map<string, NodeJS.Timeout> = new Map();
+  private readonly isServerless = process.env.VERCEL === "1";
 
   constructor(
     config: StoreConfig,
@@ -117,7 +119,7 @@ export class TelegramBotController {
     const storeId = this.identifyStoreForSender(pending?.senderPhone);
 
     if (storeId) {
-      this.batchAccumulator.processWithStore(senderId, storeId);
+      await this.batchAccumulator.processWithStore(senderId, storeId);
       await this.sendMessage(
         String(chatId),
         "⚡ Processing your photos now...",
@@ -191,26 +193,36 @@ export class TelegramBotController {
       const pending = this.batchAccumulator.getPendingBatch(senderId);
       const photoCount = pending?.photos.length ?? 1;
 
-      // In serverless environments (Vercel), setTimeout-based debouncing doesn't
-      // work because the process exits after the response is sent. Reply immediately.
-      try {
-        await ctx.reply(
-          `📸 ${photoCount} ${photoCount === 1 ? "фотографія" : "фотографій"} отримано! Додайте ще або натисніть "Опрацювати зараз"`,
-        );
-        const keyboard = new InlineKeyboard().text(
-          "⚡ Опрацювати зараз",
-          "process_now",
-        );
-        await ctx.reply("Готово для опрацювання?", {
-          reply_markup: keyboard,
-        });
-      } catch (err) {
-        this.logger.info("reply_error", {
-          senderId,
-          details: {
-            error: err instanceof Error ? err.message : String(err),
-          },
-        });
+      const sendReply = async () => {
+        try {
+          await ctx.reply(
+            `📸 ${photoCount} ${photoCount === 1 ? "фотографія" : "фотографій"} отримано! Додайте ще або натисніть "Опрацювати зараз"`,
+          );
+          const keyboard = new InlineKeyboard().text(
+            "⚡ Опрацювати зараз",
+            "process_now",
+          );
+          await ctx.reply("Готово для опрацювання?", {
+            reply_markup: keyboard,
+          });
+        } catch (err) {
+          this.logger.info("reply_error", {
+            senderId,
+            details: {
+              error: err instanceof Error ? err.message : String(err),
+            },
+          });
+        }
+      };
+
+      if (this.isServerless) {
+        // Serverless: process exits after response, timers never fire — reply immediately
+        await sendReply();
+      } else {
+        // Polling: process stays alive, debounce so burst uploads produce one prompt
+        const existingTimer = this.replyDebounceTimers.get(senderId);
+        if (existingTimer) clearTimeout(existingTimer);
+        this.replyDebounceTimers.set(senderId, setTimeout(sendReply, 1500));
       }
     };
 
@@ -261,9 +273,9 @@ export class TelegramBotController {
           return;
         }
 
-        this.batchAccumulator.processWithStore(senderId, storeId);
         await ctx.answerCallbackQuery({ text: `Store: ${storeId}` });
         await ctx.reply(`⚡ Опрацьовую фото продаж: ${storeId}...`);
+        await this.batchAccumulator.processWithStore(senderId, storeId);
       }
     });
 
