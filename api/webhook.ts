@@ -103,22 +103,14 @@ export default async function handler(req: any, res: any): Promise<void> {
     const bot = await controller.getBotReady();
     const update = req.body;
 
-    // Respond to Telegram immediately — grammY's internal 10s timeout
-    // fires if we don't reply fast enough. Processing happens in the background.
+    // Process the update fully before responding.
+    // Vercel keeps the function alive until res.end() is called, so we
+    // do all the work first, then send 200 — no timeout from grammY since
+    // we're calling handleUpdate directly instead of via webhookCallback.
+    await bot.handleUpdate(update);
+
     res.statusCode = 200;
     res.end("OK");
-
-    // waitUntil keeps the Vercel function alive until processing completes,
-    // even after the response has been sent.
-    const processing = bot.handleUpdate(update).catch((error) => {
-      console.error("Update processing error:", error);
-    });
-
-    if (typeof (globalThis as any).waitUntil === "function") {
-      (globalThis as any).waitUntil(processing);
-    } else {
-      await processing;
-    }
   } catch (error) {
     console.error("Webhook error:", error);
     if (!res.writableEnded) {

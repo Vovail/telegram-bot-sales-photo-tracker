@@ -1,5 +1,10 @@
 {
     "version": 2,
     "buildCommand": "",
-    "outputDirectory": ""
+    "outputDirectory": "",
+    "functions": {
+        "api/webhook.ts": {
+            "maxDuration": 180
+        }
+    }
 }
