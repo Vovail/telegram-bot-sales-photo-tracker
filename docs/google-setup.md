@@ -134,7 +134,7 @@ For each store, create a Google Sheet:
 5. Use this as `sheetDocumentId` in your `stores.json`
 
 The bot will automatically create monthly tabs (e.g., `2026-04`) with these columns:
-`Date | Item Name | Model | Size | Color | Price | Is Cashless | Photo Link`
+`Дата | Тип | Назва | Розмір | Колір | Ціна | Безгот | Фото`
 
 ## 7. Set Up Gemini API
 

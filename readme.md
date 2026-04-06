@@ -50,7 +50,7 @@ Telegram bot that automates daily sales data collection from multiple offline st
 
 ## Prerequisites
 
-- Node.js 18+
+- Node.js 24+
 - npm
 - A Telegram bot token
 - Google Cloud project with Drive and Sheets APIs enabled

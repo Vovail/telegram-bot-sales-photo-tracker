@@ -12,7 +12,6 @@ dist/
 !package.json
 !package-lock.json
 !tsconfig.json
-!stores.json
 !vercel.json
 
 # OS files
